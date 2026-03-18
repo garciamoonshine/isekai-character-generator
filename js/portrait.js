@@ -1,5 +1,7 @@
 // ===== AI PORTRAIT GENERATION =====
+// Model: zimage via gen.pollinations.ai
 const POLLINATIONS_BASE = 'https://gen.pollinations.ai/image/';
+const PORTRAIT_MODEL = 'zimage';
 
 function buildPortraitPrompt(char) {
   return `anime fantasy RPG character portrait, ${char.race.name}, ${char.cls.name}, ` +
@@ -8,45 +10,62 @@ function buildPortraitPrompt(char) {
     `white gradient background, upper body shot, digital art`;
 }
 
-function getPortraitUrl(char, seed, key) {
+function getPortraitUrl(char, seed) {
   const prompt = buildPortraitPrompt(char);
   const encoded = encodeURIComponent(prompt);
-  let url = `${POLLINATIONS_BASE}${encoded}?width=512&height=512&nologo=true`;
-  if (key) url += `&key=${key}`;
+  let url = `${POLLINATIONS_BASE}${encoded}?width=512&height=512&nologo=true&model=${PORTRAIT_MODEL}`;
   if (seed !== undefined) url += `&seed=${seed}`;
   return url;
 }
 
-function loadPortrait(char, portraitSeed) {
+// Fetch portrait as blob using Authorization header (handles sk_ keys correctly)
+async function fetchPortraitBlob(url, key) {
+  const headers = {};
+  if (key) headers['Authorization'] = `Bearer ${key}`;
+  try {
+    const resp = await fetch(url, { headers });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const blob = await resp.blob();
+    return URL.createObjectURL(blob);
+  } catch (e) {
+    // Fallback: try URL param method (works for pk_ keys without CORS issue)
+    const fallbackUrl = key ? url + `&key=${encodeURIComponent(key)}` : url;
+    const resp2 = await fetch(fallbackUrl);
+    if (!resp2.ok) throw new Error(`Fallback HTTP ${resp2.status}`);
+    const blob2 = await resp2.blob();
+    return URL.createObjectURL(blob2);
+  }
+}
+
+async function loadPortrait(char, portraitSeed) {
   const key = window.pollinationsKey || null;
   const img = document.getElementById('portrait-img');
   const placeholder = document.getElementById('portrait-placeholder');
   const loading = document.getElementById('portrait-loading');
-  const seedDisplay = document.getElementById('portrait-seed');
   const seedWrap = document.getElementById('portrait-seed');
+  const seedDisplay = document.getElementById('seed-display');
 
   img.classList.add('hidden');
   placeholder.classList.add('hidden');
   loading.classList.remove('hidden');
+  loading.textContent = '⏳ Generating portrait (zimage)...';
 
-  const pSeed = portraitSeed !== undefined ? portraitSeed : char.seed;
-  const url = getPortraitUrl(char, pSeed, key);
+  const pSeed = (portraitSeed !== undefined) ? portraitSeed : char.seed;
+  const url = getPortraitUrl(char, pSeed);
 
-  const tempImg = new Image();
-  tempImg.crossOrigin = 'anonymous';
-  tempImg.onload = () => {
-    img.src = url;
+  try {
+    const blobUrl = await fetchPortraitBlob(url, key);
+    img.src = blobUrl;
     img.classList.remove('hidden');
     loading.classList.add('hidden');
     seedWrap.classList.remove('hidden');
-    seedDisplay.textContent = pSeed;
-  };
-  tempImg.onerror = () => {
+    if (seedDisplay) seedDisplay.textContent = pSeed;
+  } catch (e) {
+    console.error('[Portrait] Failed:', e);
     loading.classList.add('hidden');
     placeholder.classList.remove('hidden');
-    placeholder.innerHTML = '⚠️<br>Portrait failed<br><small>Check connection</small>';
-  };
-  tempImg.src = url;
+    placeholder.innerHTML = `⚠️<br>Portrait failed<br><small>${e.message}</small>`;
+  }
 
   return pSeed;
 }
