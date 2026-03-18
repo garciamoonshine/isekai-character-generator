@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🌐 Character Gallery — Isekai Generator</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>⚔️ Isekai Character Generator</h1>
+    <p class="subtitle">Community Gallery — Published Characters</p>
+    <nav>
+      <a href="index.html">⚔️ Generate</a>
+      <a href="gallery.html" class="nav-active">🌐 Gallery</a>
+    </nav>
+  </header>
+
+  <main>
+    <div id="gallery-intro">
+      <p>Browse characters published by the community. Click any card to view full stats or chat!</p>
+      <p style="font-size:13px;color:#aaa">Characters are stored in your browser. <a href="index.html">Generate & publish yours →</a></p>
+    </div>
+    <div id="gallery-grid"></div>
+    <div id="gallery-empty" class="hidden">
+      <p>No published characters yet. <a href="index.html">Be the first!</a></p>
+    </div>
+  </main>
+
+  <script src="data/tables.js"></script>
+  <script src="js/rng.js"></script>
+  <script src="js/share.js"></script>
+  <script src="js/gallery.js"></script>
+</body>
+</html>

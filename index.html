@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>⚔️ Isekai Character Generator</title>
+  <meta property="og:title" content="Isekai Character Generator">
+  <meta property="og:description" content="Generate your Isekai character — stats, skills, portrait & backstory. Powered by Pollinations AI.">
+  <meta name="theme-color" content="#1a0a2e">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- BYOP Auth Banner -->
+  <div id="auth-banner" class="hidden">
+    <div class="auth-inner">
+      <span>⚡ Connect Pollinations to generate portraits</span>
+      <button id="byop-btn">🔗 Connect with Pollinations</button>
+      <span id="auth-status"></span>
+    </div>
+  </div>
+
+  <header>
+    <h1>⚔️ Isekai Character Generator</h1>
+    <p class="subtitle">Get isekai'd — discover your new identity, skills & destiny</p>
+    <nav>
+      <a href="index.html" class="nav-active">⚔️ Generate</a>
+      <a href="gallery.html">🌐 Gallery</a>
+    </nav>
+  </header>
+
+  <main>
+    <!-- Controls -->
+    <div id="controls-bar">
+      <button id="generate-btn" class="btn-primary">🎲 Roll New Character</button>
+      <button id="reroll-portrait-btn" class="btn-secondary" disabled>🎨 Reroll Portrait</button>
+      <button id="share-btn" class="btn-secondary" disabled>🔗 Share</button>
+      <button id="publish-btn" class="btn-secondary" disabled>🌐 Publish to Gallery</button>
+      <button id="export-btn" class="btn-secondary" disabled>📥 Export JSON</button>
+    </div>
+
+    <div id="app-layout">
+      <!-- Portrait Panel -->
+      <div id="portrait-panel">
+        <div id="portrait-wrap">
+          <img id="portrait-img" src="" alt="Character Portrait" class="hidden">
+          <div id="portrait-placeholder">🎲<br>Roll a character<br>to generate portrait</div>
+          <div id="portrait-loading" class="hidden">⏳ Generating portrait...</div>
+        </div>
+        <div id="portrait-seed" class="hidden">Seed: <span id="seed-display"></span></div>
+        <div id="connect-hint" class="hidden">⚡ <a href="#" id="connect-link">Connect Pollinations</a> for AI portraits</div>
+      </div>
+
+      <!-- Character Sheet -->
+      <div id="character-sheet" class="hidden">
+        <div class="char-header">
+          <h2 id="char-name"></h2>
+          <div class="char-title" id="char-title"></div>
+        </div>
+
+        <div class="sheet-grid">
+          <div class="sheet-section">
+            <h3>🧬 Identity</h3>
+            <div class="field"><label>Race</label><span id="f-race"></span></div>
+            <div class="field"><label>Class</label><span id="f-class"></span></div>
+            <div class="field"><label>Origin World</label><span id="f-origin"></span></div>
+            <div class="field"><label>Isekai'd By</label><span id="f-isekai"></span></div>
+          </div>
+
+          <div class="sheet-section">
+            <h3>⚔️ Combat</h3>
+            <div class="stats-grid">
+              <div class="stat-box"><div class="stat-val" id="s-str"></div><div class="stat-lbl">STR</div></div>
+              <div class="stat-box"><div class="stat-val" id="s-int"></div><div class="stat-lbl">INT</div></div>
+              <div class="stat-box"><div class="stat-val" id="s-agi"></div><div class="stat-lbl">AGI</div></div>
+              <div class="stat-box"><div class="stat-val" id="s-def"></div><div class="stat-lbl">DEF</div></div>
+              <div class="stat-box"><div class="stat-val" id="s-luk"></div><div class="stat-lbl">LUK</div></div>
+              <div class="stat-box"><div class="stat-val" id="s-cha"></div><div class="stat-lbl">CHA</div></div>
+            </div>
+          </div>
+
+          <div class="sheet-section">
+            <h3>✨ Special Skill</h3>
+            <div class="skill-box">
+              <div class="skill-name" id="skill-name"></div>
+              <div class="skill-desc" id="skill-desc"></div>
+            </div>
+          </div>
+
+          <div class="sheet-section">
+            <h3>👁️ Appearance</h3>
+            <div class="field"><label>Hair</label><span id="f-hair"></span></div>
+            <div class="field"><label>Eyes</label><span id="f-eyes"></span></div>
+            <div class="field"><label>Build</label><span id="f-build"></span></div>
+            <div class="field"><label>Mark</label><span id="f-mark"></span></div>
+            <div class="field"><label>Style</label><span id="f-style"></span></div>
+          </div>
+
+          <div class="sheet-section">
+            <h3>🧠 Personality</h3>
+            <div id="traits-wrap"></div>
+            <div class="field" style="margin-top:8px"><label>Alignment</label><span id="f-alignment"></span></div>
+          </div>
+
+          <div class="sheet-section">
+            <h3>🎒 Starting Item</h3>
+            <div class="item-box">
+              <div class="item-name" id="item-name"></div>
+              <div class="item-desc" id="item-desc"></div>
+            </div>
+          </div>
+
+          <div class="sheet-section full-width">
+            <h3>📖 Backstory</h3>
+            <div id="backstory-text" class="backstory"></div>
+          </div>
+
+          <div class="sheet-section full-width">
+            <h3>🎯 Goal in This World</h3>
+            <div id="goal-text" class="backstory"></div>
+          </div>
+
+          <div class="sheet-section">
+            <h3>🔮 Hidden Stat <span style="font-size:11px;color:#aaa">(unlocks at Bond Lv.5)</span></h3>
+            <div class="hidden-stat-box" id="hidden-stat-box">
+              <div id="hidden-stat-name">???</div>
+              <div id="hidden-stat-val">??</div>
+            </div>
+          </div>
+
+          <div class="sheet-section">
+            <h3>🔗 Shareable Link</h3>
+            <div id="share-url-box" class="share-url"></div>
+          </div>
+        </div>
+
+        <div id="powered-by">🎨 Portrait & AI powered by <a href="https://pollinations.ai" target="_blank">Pollinations AI</a> · BYOP</div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Share Toast -->
+  <div id="toast" class="hidden">✅ Link copied to clipboard!</div>
+
+  <script src="data/tables.js"></script>
+  <script src="js/rng.js"></script>
+  <script src="js/generator.js"></script>
+  <script src="js/portrait.js"></script>
+  <script src="js/share.js"></script>
+  <script src="js/byop.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
