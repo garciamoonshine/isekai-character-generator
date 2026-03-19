@@ -1,7 +1,7 @@
 // ===== CHARACTER GENERATION ENGINE =====
 function generateCharacter(seed) {
     const rng = makeRNG(seed);
-    const race = rng.pick(RACES);
+    const gender = rng.pick(GENDERS);\n  const race = rng.pick(RACES);
     const cls = rng.pick(CLASSES);
     const skill = rng.pick(SKILLS);
     const traits = rng.pickN(TRAITS, 3);
@@ -31,7 +31,7 @@ function generateCharacter(seed) {
     const title = `The ${rng.pick(['Legendary','Overpowered','Cursed','Blessed','Forgotten','Exiled','Reborn','Awakened'])} ${cls.name}`;
     const backstory = `Originally from ${origin}, ${firstName} was ${isekaiMethod.toLowerCase()} and found themselves in this fantasy world with no memory of how to return. Identified as a ${race.name} ${cls.name} by the local guild, they quickly rose to infamy after their unique skill ${skill.name} was discovered.`;
 
-    return { seed, name, title, race, cls, skill, traits, stats, hair, eyes, build, mark, style, item, hiddenStat, alignment, origin, isekaiMethod, goal, backstory };
+    return { seed, gender, name, title, race, cls, skill, traits, stats, hair, eyes, build, mark, style, item, hiddenStat, alignment, origin, isekaiMethod, goal, backstory };
 }
 
 window.currentCharacter = null;
@@ -40,7 +40,7 @@ function renderCharacter(char) {
     window.currentCharacter = char;
     document.getElementById('char-name').textContent = char.name;
     document.getElementById('char-title').textContent = char.title;
-    document.getElementById('f-race').textContent = `${char.race.name} — ${char.race.desc}`;
+      document.getElementById('f-race').textContent = `${char.race.name} — ${char.race.desc}`;\n  document.getElementById('f-gender').textContent = char.gender;
     document.getElementById('f-class').textContent = `${char.cls.icon} ${char.cls.name}`;
     document.getElementById('f-origin').textContent = char.origin;
     document.getElementById('f-isekai').textContent = char.isekaiMethod;
