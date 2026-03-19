@@ -3,13 +3,11 @@ let currentSeed = null;
 let currentPortraitSeed = null;
 
 document.addEventListener('DOMContentLoaded', () => {
-    // 1. Initial State: Check for shared seed in URL
     const seeds = getShareSeed();
     if (seeds.charSeed !== null) {
         loadFromSeeds(seeds.charSeed, seeds.portraitSeed);
     }
 
-    // 2. Button Listeners
     document.getElementById('generate-btn').addEventListener('click', () => {
         currentSeed = generateSeed();
         currentPortraitSeed = currentSeed;
@@ -50,15 +48,9 @@ document.addEventListener('DOMContentLoaded', () => {
 function loadFromSeeds(charSeed, portraitSeed) {
     currentSeed = charSeed;
     currentPortraitSeed = (portraitSeed !== null) ? portraitSeed : charSeed;
-    
-    // Generate the character logic
     const char = generateCharacter(currentSeed);
     renderCharacter(char);
-    
-    // Load visuals
     loadPortrait(char, currentPortraitSeed);
-    
-    // Update interface
     updateURLAndShareBox();
 }
 
@@ -73,7 +65,6 @@ function publishToGallery(char, portraitSeed) {
     const gallery = JSON.parse(localStorage.getItem('isekai_gallery') || '[]');
     const uniqueId = `${char.seed}_${portraitSeed}`;
     const exists = gallery.find(c => c.id === uniqueId);
-    
     if (!exists) {
         gallery.unshift({
             id: uniqueId,
