@@ -27,7 +27,7 @@ async function fetchPortraitBlob(url, key) {
   try {
     const fetchOptions = { headers };
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 60000);
+    const timeoutId = setTimeout(() => controller.abort(), 60000); 
     fetchOptions.signal = controller.signal;
 
     const resp = await fetch(url, fetchOptions);
@@ -39,12 +39,19 @@ async function fetchPortraitBlob(url, key) {
     }
     
     if (resp.status === 400) {
+        const errJson = await resp.json().catch(() => ({}));
+        const internalMsg = errJson.error?.message || '';
+        
         if (!key) {
             lastErrorDetail = 'Unconnected';
             throw new Error('Unconnected');
+        } else if (internalMsg.includes("Query parameter 'key'")) {
+            // AUTH METHOD FIX: If API rejects 'key' param, it means this key MUST use the Header method.
+            // We've already tried headers, so if we're here with headers, there's a different auth mismatch.
+            lastErrorDetail = 'Auth Error: Key Type Mismatch';
+            throw new Error(lastErrorDetail);
         } else {
-            const errText = await resp.text();
-            lastErrorDetail = `Bad Request: ${errText.substring(0, 50)}`;
+            lastErrorDetail = internalMsg || 'Bad Request';
             throw new Error(lastErrorDetail);
         }
     }
@@ -62,7 +69,8 @@ async function fetchPortraitBlob(url, key) {
         lastErrorDetail = 'Request Timed Out';
         throw new Error('Request Timed Out');
     }
-    if (key && !e.message.includes('Pollen') && !e.message.includes('Bad')) {
+    // Only fallback to anonymous if isn't a specific "Pollen Depleted" or "Bad Request" error
+    if (key && !lastErrorDetail?.includes('Pollen') && !lastErrorDetail?.includes('Bad')) {
         console.warn('[Portrait] Auth failed, trying public fallback...');
         return fetchPortraitBlob(url, null); 
     }
@@ -99,19 +107,16 @@ async function loadPortrait(char, portraitSeed) {
     loading.classList.add('hidden');
     placeholder.classList.remove('hidden');
     
-    // VISITOR SCENARIO
-    if (e.message === 'Unconnected' || (!key && e.message.includes('400')) || (!key && e.message.includes('Bad'))) {
+    if (e.message === 'Unconnected' || (!key && e.message.includes('400'))) {
         placeholder.innerHTML = `
             <div style="padding:20px;">
                 <div style="font-size:40px; margin-bottom:10px;">🔌</div>
                 <div style="font-weight:bold; color:var(--accent); font-size:16px;">Connection Required</div>
-                <div style="font-size:12px; margin-top:10px; opacity:0.8; line-height:1.4;">Connect your free Pollinations account to manifested this hero's portrait!</div>
+                <div style="font-size:12px; margin-top:10px; opacity:0.8; line-height:1.4;">Connect your free Pollinations account to manifest this hero's portrait!</div>
                 <button onclick="document.getElementById('byop-btn').click()" style="margin-top:20px; background:var(--accent); color:#000; border:none; padding:10px 20px; border-radius:30px; font-weight:bold; cursor:pointer; font-size:13px; box-shadow:0 4px 15px rgba(192,132,252,0.3);">🔗 Connect with Pollinations</button>
             </div>
         `;
-    } 
-    // ERROR SCENARIO (Connected or Quota)
-    else {
+    } else {
         let msg = 'Summoning Failed';
         let detail = e.message;
         if (e.message.includes('Pollen')) {
