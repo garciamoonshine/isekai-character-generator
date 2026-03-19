@@ -1,7 +1,8 @@
 // ===== CHARACTER GENERATION ENGINE =====
 function generateCharacter(seed) {
     const rng = makeRNG(seed);
-    const gender = rng.pick(GENDERS);\n  const race = rng.pick(RACES);
+    const gender = rng.pick(GENDERS);
+    const race = rng.pick(RACES);
     const cls = rng.pick(CLASSES);
     const skill = rng.pick(SKILLS);
     const traits = rng.pickN(TRAITS, 3);
@@ -38,35 +39,52 @@ window.currentCharacter = null;
 
 function renderCharacter(char) {
     window.currentCharacter = char;
+    
+    // Identity fields
     document.getElementById('char-name').textContent = char.name;
     document.getElementById('char-title').textContent = char.title;
-      document.getElementById('f-race').textContent = `${char.race.name} — ${char.race.desc}`;\n  document.getElementById('f-gender').textContent = char.gender;
+    document.getElementById('f-gender').textContent = char.gender;
+    document.getElementById('f-race').textContent = `${char.race.name} — ${char.race.desc}`;
     document.getElementById('f-class').textContent = `${char.cls.icon} ${char.cls.name}`;
     document.getElementById('f-origin').textContent = char.origin;
     document.getElementById('f-isekai').textContent = char.isekaiMethod;
+    
+    // Stats fields
     document.getElementById('s-str').textContent = char.stats.STR;
     document.getElementById('s-int').textContent = char.stats.INT;
     document.getElementById('s-agi').textContent = char.stats.AGI;
     document.getElementById('s-def').textContent = char.stats.DEF;
     document.getElementById('s-luk').textContent = char.stats.LUK;
     document.getElementById('s-cha').textContent = char.stats.CHA;
+    
+    // Skill fields
     document.getElementById('skill-name').textContent = char.skill.name;
     document.getElementById('skill-desc').textContent = char.skill.desc;
+    
+    // Appearance fields
     document.getElementById('f-hair').textContent = char.hair;
     document.getElementById('f-eyes').textContent = char.eyes;
     document.getElementById('f-build').textContent = char.build;
     document.getElementById('f-mark').textContent = char.mark;
     document.getElementById('f-style').textContent = char.style;
+    
+    // Personality traits
     const traitsWrap = document.getElementById('traits-wrap');
     traitsWrap.innerHTML = char.traits.map(t => `<span class="trait-tag">${t}</span>`).join('');
     document.getElementById('f-alignment').textContent = char.alignment;
+    
+    // Misc fields
     document.getElementById('item-name').textContent = char.item.name;
     document.getElementById('item-desc').textContent = char.item.desc;
     document.getElementById('backstory-text').textContent = char.backstory;
     document.getElementById('goal-text').textContent = char.goal;
+    
     document.getElementById('hidden-stat-name').textContent = '???';
     document.getElementById('hidden-stat-val').textContent = '??';
+    
     document.getElementById('character-sheet').classList.remove('hidden');
+    
+    // Enable buttons
     ['reroll-portrait-btn','share-btn','publish-btn','export-btn'].forEach(id => {
         const btn = document.getElementById(id);
         if (btn) btn.disabled = false;
