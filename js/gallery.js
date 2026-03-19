@@ -1,10 +1,10 @@
-// ===== GLOBAL GALLERY CONTROLLER =====
+// ===== GLOBAL GALLERY (PRO-UX EDITION) =====
 document.addEventListener('DOMContentLoaded', async () => {
   const grid = document.getElementById('gallery-grid');
   const empty = document.getElementById('gallery-empty');
   const loader = document.createElement('div');
   loader.id = 'gallery-loader';
-  loader.innerHTML = '🔮 Summoning Heroes from the Multiverse...';
+  loader.innerHTML = '🔮 Summoning Heroes from R2 Storage...';
   loader.style.textAlign = 'center';
   loader.style.gridColumn = '1/-1';
   loader.style.padding = '100px 20px';
@@ -13,7 +13,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   try {
     const res = await fetch('/api/gallery');
-    if (!res.ok) throw new Error('API Offline');
     const gallery = await res.json();
     loader.remove();
 
@@ -22,25 +21,15 @@ document.addEventListener('DOMContentLoaded', async () => {
       return;
     }
 
-    gallery.forEach(char => {
+    gallery.reverse().forEach(char => {
       const card = document.createElement('div');
       card.className = 'gallery-card';
       
-      let link = `index.html#seed=${char.seed}`;
-      if (char.portraitSeed && char.portraitSeed !== char.seed) {
-          link += `&pseed=${char.portraitSeed}`;
-      }
+      // We pass the R2 filename in the URL so the index page knows to load the FROZEN image
+      let filename = `portrait_${char.seed}_${char.portraitSeed}.png`;
+      let link = `index.html#seed=${char.seed}&pseed=${char.portraitSeed}&r2=${filename}`;
 
-      // DETERMINING IMAGE SOURCE
-      let liveUrl;
-      if (char.portraitUrl && char.portraitUrl.startsWith('/api/')) {
-          // IF IT IS FROZEN IN R2: Use our proxy
-          liveUrl = char.portraitUrl;
-      } else {
-          // IF IT IS A RECIPE: Reconstruct using stable /p/ endpoint + flux
-          const prompt = char.prompt || `anime fantasy RPG character portrait, ${char.race}, ${char.cls}, detailed face, digital art`;
-          liveUrl = `https://pollinations.ai/p/${encodeURIComponent(prompt)}?width=300&height=533&nologo=true&model=flux&seed=${char.portraitSeed || char.seed}`;
-      }
+      const liveUrl = char.portraitUrl || `https://pollinations.ai/p/rpg-portrait?seed=${char.portraitSeed}`;
 
       card.innerHTML = `
         <div class="gc-portrait-wrap" style="aspect-ratio:9/16; background:var(--bg3); border-radius:10px; overflow:hidden; margin-bottom:12px;">
@@ -56,7 +45,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       grid.appendChild(card);
     });
   } catch (e) {
-    loader.innerHTML = '⚠️ The Multiverse connection is unstable.<br><small>Please verify Cloudflare KV/R2 bindings.</small>';
-    console.error('[Gallery] API Error:', e);
+    loader.innerHTML = '⚠️ The Multiverse connection is unstable.';
   }
 });
