@@ -17,62 +17,45 @@ function getPortraitUrl(char, seed) {
   return url;
 }
 
-// Global reference to the current error message for display
-let lastErrorDetail = null;
-
 async function fetchPortraitBlob(url, key) {
   const headers = {};
   if (key) headers['Authorization'] = `Bearer ${key}`;
   
   try {
-    const fetchOptions = { headers };
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 60000); 
-    fetchOptions.signal = controller.signal;
-
-    const resp = await fetch(url, fetchOptions);
+    const resp = await fetch(url, { headers, signal: controller.signal });
     clearTimeout(timeoutId);
     
+    // 1. Quota Errors
     if (resp.status === 402 || resp.status === 429) {
-        lastErrorDetail = 'Pollen Depleted';
-        throw new Error('Pollen Depleted');
+        throw new Error('QUOTA_EXHAUSTED');
     }
     
+    // 2. Auth Errors (401/403)
+    if (resp.status === 401 || resp.status === 403) {
+        if (key) throw new Error('INVALID_KEY');
+        throw new Error('VISITOR_REJECTED');
+    }
+
+    // 3. User Errors (400)
     if (resp.status === 400) {
-        const errJson = await resp.json().catch(() => ({}));
-        const internalMsg = errJson.error?.message || '';
-        
-        if (!key) {
-            lastErrorDetail = 'Unconnected';
-            throw new Error('Unconnected');
-        } else if (internalMsg.includes("Query parameter 'key'")) {
-            // AUTH METHOD FIX: If API rejects 'key' param, it means this key MUST use the Header method.
-            // We've already tried headers, so if we're here with headers, there's a different auth mismatch.
-            lastErrorDetail = 'Auth Error: Key Type Mismatch';
-            throw new Error(lastErrorDetail);
-        } else {
-            lastErrorDetail = internalMsg || 'Bad Request';
-            throw new Error(lastErrorDetail);
-        }
+        const body = await resp.json().catch(() => ({}));
+        throw new Error(body.error?.message || 'BAD_REQUEST');
     }
     
-    if (!resp.ok) {
-        lastErrorDetail = `HTTP ${resp.status}`;
-        throw new Error(lastErrorDetail);
-    }
+    if (!resp.ok) throw new Error(`HTTP_${resp.status}`);
     
     const blob = await resp.blob();
-    if (blob.size < 100) throw new Error('Empty Image Data');
+    if (blob.size < 100) throw new Error('EMPTY_DATA');
     return URL.createObjectURL(blob);
   } catch (e) {
-    if (e.name === 'AbortError') {
-        lastErrorDetail = 'Request Timed Out';
-        throw new Error('Request Timed Out');
-    }
-    // Only fallback to anonymous if isn't a specific "Pollen Depleted" or "Bad Request" error
-    if (key && !lastErrorDetail?.includes('Pollen') && !lastErrorDetail?.includes('Bad')) {
-        console.warn('[Portrait] Auth failed, trying public fallback...');
-        return fetchPortraitBlob(url, null); 
+    if (e.name === 'AbortError') throw new Error('TIMEOUT');
+    
+    // Fallback: If we had a key and it failed (but not a quota issue), try anonymous automatically
+    if (key && !['QUOTA_EXHAUSTED', 'BAD_REQUEST'].includes(e.message)) {
+        console.warn('[Portrait] Key failed, trying anonymous fallback...');
+        return fetchPortraitBlob(url, null);
     }
     throw e;
   }
@@ -103,27 +86,49 @@ async function loadPortrait(char, portraitSeed) {
     seedWrap.classList.remove('hidden');
     if (seedDisplay) seedDisplay.textContent = pSeed;
   } catch (e) {
-    console.error('[Portrait] Error Caught:', e);
+    console.error('[Portrait] Error:', e.message);
     loading.classList.add('hidden');
     placeholder.classList.remove('hidden');
     
-    if (e.message === 'Unconnected' || (!key && e.message.includes('400'))) {
+    let title = 'Summoning Failed';
+    let detail = e.message;
+    let showConnect = false;
+
+    // SCENARIO: VISITOR (No Key)
+    if (!key) {
+        if (['VISITOR_REJECTED', 'BAD_REQUEST', 'HTTP_400', 'HTTP_401'].some(m => e.message.includes(m))) {
+            title = 'Connection Required';
+            detail = 'Connect your free Pollinations account to manifest this hero!';
+            showConnect = true;
+        } else if (e.message === 'QUOTA_EXHAUSTED') {
+            title = 'Pollen Depleted 🌸';
+            detail = 'The public hourly quota is full. Connect your own key to bypass!';
+            showConnect = true;
+        }
+    } 
+    // SCENARIO: CONNECTED (Has Key)
+    else {
+        if (e.message === 'INVALID_KEY') {
+            title = 'Key Invalid';
+            detail = 'Your API key was rejected. Please reconnect.';
+            showConnect = true;
+        } else if (e.message === 'QUOTA_EXHAUSTED') {
+            title = 'Credits Empty';
+            detail = 'Your Pollen account has run out of credits.';
+        }
+    }
+
+    if (showConnect) {
         placeholder.innerHTML = `
             <div style="padding:20px;">
                 <div style="font-size:40px; margin-bottom:10px;">🔌</div>
-                <div style="font-weight:bold; color:var(--accent); font-size:16px;">Connection Required</div>
-                <div style="font-size:12px; margin-top:10px; opacity:0.8; line-height:1.4;">Connect your free Pollinations account to manifest this hero's portrait!</div>
+                <div style="font-weight:bold; color:var(--accent); font-size:16px;">${title}</div>
+                <div style="font-size:12px; margin-top:10px; opacity:0.8; line-height:1.4;">${detail}</div>
                 <button onclick="document.getElementById('byop-btn').click()" style="margin-top:20px; background:var(--accent); color:#000; border:none; padding:10px 20px; border-radius:30px; font-weight:bold; cursor:pointer; font-size:13px; box-shadow:0 4px 15px rgba(192,132,252,0.3);">🔗 Connect with Pollinations</button>
             </div>
         `;
     } else {
-        let msg = 'Summoning Failed';
-        let detail = e.message;
-        if (e.message.includes('Pollen')) {
-            msg = 'Pollen Depleted 🌸';
-            detail = 'Hourly public quota reached.<br>Connect your own key to bypass.';
-        }
-        placeholder.innerHTML = `<div style="padding:20px;"><div style="font-size:40px; margin-bottom:10px;">⚠️</div><strong>${msg}</strong><br><small style="display:block; margin-top:8px; opacity:0.7;">${detail}</small></div>`;
+        placeholder.innerHTML = `<div style="padding:20px;"><div style="font-size:40px; margin-bottom:10px;">⚠️</div><strong>${title}</strong><br><small style="display:block; margin-top:8px; opacity:0.7;">${detail}</small></div>`;
     }
   } finally {
     setBusy(false);
