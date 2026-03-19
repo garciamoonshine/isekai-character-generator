@@ -80,7 +80,7 @@ const ITEMS = [
 
 const HIDDEN_STATS = ['FATE', 'KARMA', 'DIVINITY', 'SHADOW', 'CHAOS', 'VOID', 'SOUL', 'DESTINY'];
 
-const GOALS = [
+\nconst GENDERS = ['Male', 'Female', 'Male', 'Female', 'Non-binary', 'Bishounen', 'Bishoujo'];\n\nconst GOALS = [
   'Find a way back to the original world — but slowly losing the desire to.',
   'Become the strongest being in this world and rewrite its rules.',
   'Locate the one who summoned them and demand answers.',
