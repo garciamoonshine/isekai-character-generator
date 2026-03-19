@@ -12,7 +12,6 @@ function getShareSeed() {
     const hash = window.location.hash;
     const charMatch = hash.match(/seed=(\d+)/);
     const portMatch = hash.match(/pseed=(\d+)/);
-    
     return {
         charSeed: charMatch ? parseInt(charMatch[1]) : null,
         portraitSeed: portMatch ? parseInt(portMatch[1]) : null
