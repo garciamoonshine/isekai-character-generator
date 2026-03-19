@@ -22,19 +22,30 @@ export async function onRequestPost(context) {
     const charData = JSON.parse(formData.get('metadata'));
     const imageBlob = formData.get('image');
 
-    const timestamp = Date.now();
-    const fileName = `portrait_${charData.id}.png`;
-    const kvKey = `char_${timestamp}_${charData.id}`;
+    const uniqueId = charData.id; // composite seed_pseed
+    const fileName = `portrait_${uniqueId}.png`;
 
-    // 1. Freeze the image in R2
+    // 1. DUPLICATE CHECK
+    // We check if this specific character+portrait combo exists in KV already
+    // To do this efficiently, we check for a key starting with "id_" + uniqueId
+    const exists = await GALLERY_KV.list({ prefix: `id_${uniqueId}` });
+    if (exists.keys.length > 0) {
+        return new Response(JSON.stringify({ error: 'Already Published' }), { status: 409 });
+    }
+
+    const timestamp = Date.now();
+    const kvKey = `char_${timestamp}_${uniqueId}`;
+    const trackingKey = `id_${uniqueId}`;
+
+    // 2. Freeze the image in R2
     if (imageBlob && PORTRAITS_R2) {
         await PORTRAITS_R2.put(fileName, imageBlob);
-        // Update URL to point to our persistent internal storage
         charData.portraitUrl = `/api/portrait/${fileName}`;
     }
 
-    // 2. Save metadata to KV
+    // 3. Save to KV (Main list and Tracking key)
     await GALLERY_KV.put(kvKey, JSON.stringify(charData));
+    await GALLERY_KV.put(trackingKey, "1"); // Marker for duplicate check
     
     return new Response(JSON.stringify({ success: true }), {
       headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
