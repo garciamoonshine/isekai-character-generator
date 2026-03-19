@@ -1,13 +1,11 @@
-// ===== MAIN APP CONTROLLER (UX & R2 STORAGE SYNC) =====
+// ===== MAIN APP CONTROLLER (UX & R2 & DUP-FIX) =====
 let currentSeed = null;
 let currentPortraitSeed = null;
 let isGenerating = false;
 
 document.addEventListener('DOMContentLoaded', () => {
   const seeds = getShareSeed();
-  if (seeds.charSeed !== null) {
-      loadFromSeeds(seeds.charSeed, seeds.portraitSeed);
-  }
+  if (seeds.charSeed !== null) loadFromSeeds(seeds.charSeed, seeds.portraitSeed);
 
   document.getElementById('generate-btn').addEventListener('click', () => {
     if (isGenerating) return;
@@ -38,23 +36,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const btn = document.getElementById('publish-btn');
     btn.disabled = true;
-    btn.textContent = '⏳ Freezing in R2...';
+    btn.textContent = '⏳ Publishing...';
     
     try {
         const imageRes = await fetch(imgElement.src);
         const imageBlob = await imageRes.blob();
-        const success = await publishToGlobalGallery(window.currentCharacter, currentPortraitSeed, imageBlob);
         
-        if (success) {
-            showToast('❄️ Image frozen in R2 & Published!');
+        const res = await publishToGlobalGallery(window.currentCharacter, currentPortraitSeed, imageBlob);
+        
+        if (res.ok) {
+            showToast('🌐 Published to the Multiverse!');
             btn.textContent = '✅ Published';
+        } else if (res.status === 409) {
+            showToast('✨ This hero is already in the Gallery!');
+            btn.textContent = '✅ Already Published';
         } else {
-            showToast('⚠️ Sync failed.');
+            showToast('⚠️ Publish failed.');
             btn.disabled = false;
             btn.textContent = '🌐 Publish to Gallery';
         }
     } catch (e) {
-        showToast('⚠️ Could not process image.');
+        showToast('⚠️ Processing error.');
         btn.disabled = false;
     }
   });
@@ -65,7 +67,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `${window.currentCharacter.name.replace(/\\s+/g, '_')}.json`;
+    a.download = `${window.currentCharacter.name.replace(/\s+/g, '_')}.json`;
     a.click();
   });
 });
@@ -82,16 +84,13 @@ function setBusy(busy) {
 async function loadFromSeeds(charSeed, portraitSeed) {
   currentSeed = charSeed;
   currentPortraitSeed = (portraitSeed !== null) ? portraitSeed : charSeed;
-  
   const char = generateCharacter(currentSeed);
   renderCharacter(char);
   
-  // Check if we arrived from a link that is an R2 file
   const hash = window.location.hash;
   const r2Match = hash.match(/r2=([^&]+)/);
   
   if (r2Match) {
-      // IF VISITOR CLICKED FROM R2 GALLERY: Load the frozen R2 image instead of re-rolling
       const img = document.getElementById('portrait-img');
       img.src = `/api/portrait/${r2Match[1]}`;
       img.classList.remove('hidden');
@@ -102,7 +101,6 @@ async function loadFromSeeds(charSeed, portraitSeed) {
   } else {
       await loadPortrait(char, currentPortraitSeed);
   }
-  
   updateURLAndShareBox();
 }
 
@@ -113,37 +111,28 @@ function updateURLAndShareBox() {
     if (box) box.textContent = url;
 }
 
-// Updated loadPortrait with Busy State
 async function loadPortrait(char, portraitSeed) {
   setBusy(true);
-  const key = window.pollinationsKey || null;
   const img = document.getElementById('portrait-img');
   const placeholder = document.getElementById('portrait-placeholder');
   const loading = document.getElementById('portrait-loading');
   const seedWrap = document.getElementById('portrait-seed');
   const seedDisplay = document.getElementById('seed-display');
 
-  img.classList.add('hidden');
-  placeholder.classList.add('hidden');
-  loading.classList.remove('hidden');
+  img.classList.add('hidden'); placeholder.classList.add('hidden'); loading.classList.remove('hidden');
 
   const pSeed = (portraitSeed !== undefined) ? portraitSeed : char.seed;
   const url = getPortraitUrl(char, pSeed);
-
   try {
-    const blobUrl = await fetchPortraitBlob(url, key);
+    const blobUrl = await fetchPortraitBlob(url, window.pollinationsKey);
     img.src = blobUrl;
-    img.classList.remove('hidden');
-    loading.classList.add('hidden');
+    img.classList.remove('hidden'); loading.classList.add('hidden');
     seedWrap.classList.remove('hidden');
     if (seedDisplay) seedDisplay.textContent = pSeed;
   } catch (e) {
-    loading.classList.add('hidden');
-    placeholder.classList.remove('hidden');
+    loading.classList.add('hidden'); placeholder.classList.remove('hidden');
     placeholder.innerHTML = `⚠️<br><strong>Failed</strong><br><small>${e.message}</small>`;
-  } finally {
-    setBusy(false);
-  }
+  } finally { setBusy(false); }
   return pSeed;
 }
 
@@ -161,8 +150,5 @@ async function publishToGlobalGallery(char, portraitSeed, imageBlob) {
   const formData = new FormData();
   formData.append('metadata', JSON.stringify(metadata));
   formData.append('image', imageBlob, 'portrait.png');
-  try {
-    const res = await fetch('/api/gallery', { method: 'POST', body: formData });
-    return res.ok;
-  } catch (e) { return false; }
+  return fetch('/api/gallery', { method: 'POST', body: formData });
 }
