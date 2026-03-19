@@ -1,5 +1,6 @@
 // ===== AI PORTRAIT GENERATION =====
 const POLLINATIONS_BASE = 'https://pollinations.ai/p/';
+const PORTRAIT_MODEL = 'zimage'; 
 
 function buildPortraitPrompt(char) {
   return `anime fantasy RPG character portrait, ${char.race.name}, ${char.cls.name}, ` +
@@ -11,13 +12,13 @@ function buildPortraitPrompt(char) {
 function getPortraitUrl(char, seed) {
   const prompt = buildPortraitPrompt(char);
   const encoded = encodeURIComponent(prompt);
-  // Using the primary /p/ endpoint and explicitly setting model=flux
-  // This matches the valid options list provided in the 400 error message.
-  let url = `${POLLINATIONS_BASE}${encoded}?width=512&height=512&nologo=true&model=flux`;
+  // Using explicit model=zimage on the stable /p/ endpoint
+  let url = `${POLLINATIONS_BASE}${encoded}?width=512&height=512&nologo=true&model=${PORTRAIT_MODEL}`;
   if (seed !== undefined) url += `&seed=${seed}`;
   return url;
 }
 
+// Logic-only fetcher. Returns Blob or Throws specific string error.
 async function fetchPortraitBlob(url, key) {
   const headers = {};
   if (key) headers['Authorization'] = `Bearer ${key}`;
@@ -34,7 +35,7 @@ async function fetchPortraitBlob(url, key) {
     
     if (resp.status === 400) {
         const body = await resp.json().catch(() => ({}));
-        throw new Error(body.message || 'VALIDATION_FAILED');
+        throw new Error(body.message || body.error?.message || 'VALIDATION_FAILED');
     }
     
     if (!resp.ok) throw new Error(`HTTP_${resp.status}`);
@@ -66,6 +67,7 @@ async function loadPortrait(char, portraitSeed) {
   const url = getPortraitUrl(char, pSeed);
 
   try {
+    // 1. Try Primary (Authenticated if key exists, otherwise Anonymous)
     const blobUrl = await fetchPortraitBlob(url, key);
     img.src = blobUrl;
     img.classList.remove('hidden');
@@ -75,8 +77,8 @@ async function loadPortrait(char, portraitSeed) {
   } catch (e) {
     console.error('[Portrait] Error:', e.message);
     
-    // RETRY LOGIC: If a key was used and it failed, try anonymous fallback once
-    if (key && e.message !== 'QUOTA_EXHAUSTED') {
+    // 2. RETRY LOGIC: Fallback to anonymous if auth fails
+    if (key && !['QUOTA_EXHAUSTED', 'VALIDATION_FAILED'].includes(e.message)) {
         try {
             const fallbackBlob = await fetchPortraitBlob(url, null);
             img.src = fallbackBlob;
