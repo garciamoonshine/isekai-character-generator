@@ -1,11 +1,15 @@
-// ===== MAIN APP CONTROLLER (UX & R2 & DUP-FIX) =====
+// ===== MAIN APP CONTROLLER (UX & R2 & DUP-BLOCK) =====
 let currentSeed = null;
 let currentPortraitSeed = null;
 let isGenerating = false;
+let globalGalleryCache = null;
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   const seeds = getShareSeed();
   if (seeds.charSeed !== null) loadFromSeeds(seeds.charSeed, seeds.portraitSeed);
+
+  // Pre-fetch gallery index to handle client-side button states
+  refreshGalleryCache();
 
   document.getElementById('generate-btn').addEventListener('click', () => {
     if (isGenerating) return;
@@ -47,6 +51,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (res.ok) {
             showToast('🌐 Published to the Multiverse!');
             btn.textContent = '✅ Published';
+            // Update local cache
+            if (globalGalleryCache) globalGalleryCache.push(`${window.currentCharacter.seed}_${currentPortraitSeed}`);
         } else if (res.status === 409) {
             showToast('✨ This hero is already in the Gallery!');
             btn.textContent = '✅ Already Published';
@@ -67,10 +73,32 @@ document.addEventListener('DOMContentLoaded', () => {
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `${window.currentCharacter.name.replace(/\s+/g, '_')}.json`;
+    a.download = `${window.currentCharacter.name.replace(/\\s+/g, '_')}.json`;
     a.click();
   });
 });
+
+async function refreshGalleryCache() {
+    try {
+        const res = await fetch('/api/gallery');
+        const data = await res.json();
+        globalGalleryCache = data.map(c => c.id || `${c.seed}_${c.portraitSeed}`);
+        checkCurrentPublishStatus();
+    } catch(e) { console.warn('Cache refresh failed'); }
+}
+
+function checkCurrentPublishStatus() {
+    if (!globalGalleryCache || !window.currentCharacter) return;
+    const currentId = `${window.currentCharacter.seed}_${currentPortraitSeed}`;
+    const btn = document.getElementById('publish-btn');
+    if (globalGalleryCache.includes(currentId)) {
+        btn.disabled = true;
+        btn.textContent = '✅ Published';
+    } else {
+        btn.disabled = false;
+        btn.textContent = '🌐 Publish to Gallery';
+    }
+}
 
 function setBusy(busy) {
     isGenerating = busy;
@@ -79,6 +107,7 @@ function setBusy(busy) {
         const el = document.getElementById(id);
         if (el) el.disabled = busy;
     });
+    if (!busy) checkCurrentPublishStatus();
 }
 
 async function loadFromSeeds(charSeed, portraitSeed) {
@@ -98,6 +127,7 @@ async function loadFromSeeds(charSeed, portraitSeed) {
       document.getElementById('portrait-loading').classList.add('hidden');
       document.getElementById('portrait-seed').classList.remove('hidden');
       document.getElementById('seed-display').textContent = currentPortraitSeed;
+      setBusy(false);
   } else {
       await loadPortrait(char, currentPortraitSeed);
   }
@@ -132,7 +162,9 @@ async function loadPortrait(char, portraitSeed) {
   } catch (e) {
     loading.classList.add('hidden'); placeholder.classList.remove('hidden');
     placeholder.innerHTML = `⚠️<br><strong>Failed</strong><br><small>${e.message}</small>`;
-  } finally { setBusy(false); }
+  } finally { 
+      setBusy(false); 
+  }
   return pSeed;
 }
 
@@ -145,7 +177,8 @@ async function publishToGlobalGallery(char, portraitSeed, imageBlob) {
     title: char.title,
     race: char.race.name,
     cls: `${char.cls.icon} ${char.cls.name}`,
-    traits: char.traits
+    traits: char.traits,
+    prompt: buildPortraitPrompt(char)
   };
   const formData = new FormData();
   formData.append('metadata', JSON.stringify(metadata));
