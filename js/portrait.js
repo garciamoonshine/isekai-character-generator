@@ -12,7 +12,6 @@ function buildPortraitPrompt(char) {
 function getPortraitUrl(char, seed) {
   const prompt = buildPortraitPrompt(char);
   const encoded = encodeURIComponent(prompt);
-  // Using 512x512 square as primary to ensure stability since Joe noted zimage is square anyway
   let url = `${POLLINATIONS_BASE}${encoded}?width=512&height=512&nologo=true&model=${PORTRAIT_MODEL}`;
   if (seed !== undefined) url += `&seed=${seed}`;
   return url;
@@ -24,19 +23,20 @@ async function fetchPortraitBlob(url, key) {
   
   try {
     const fetchOptions = { headers };
-    // Add timeout to prevent hanging
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s timeout
+    const timeoutId = setTimeout(() => controller.abort(), 60000);
     fetchOptions.signal = controller.signal;
 
     const resp = await fetch(url, fetchOptions);
     clearTimeout(timeoutId);
     
     if (resp.status === 402 || resp.status === 429) throw new Error('Pollen Depleted');
+    
+    // If we get a 400 and we DON'T HAVE A KEY, it means anonymous public usage is blocked/exhausted
+    if (resp.status === 400 && !key) throw new Error('Unconnected');
+    
     if (resp.status >= 400) {
-        // Fallback: if zimage fails, try turbo model
         if (url.includes('model=zimage')) {
-            console.warn('[Portrait] zimage failed, trying turbo fallback...');
             return fetchPortraitBlob(url.replace('model=zimage', 'model=turbo'), key);
         }
         throw new Error(`API Error (${resp.status})`);
@@ -48,7 +48,7 @@ async function fetchPortraitBlob(url, key) {
   } catch (e) {
     if (e.name === 'AbortError') throw new Error('Request Timed Out');
     if (key && !e.message.includes('Depleted')) {
-        return fetchPortraitBlob(url, null); // Retry without key
+        return fetchPortraitBlob(url, null); 
     }
     throw e;
   }
@@ -85,10 +85,15 @@ async function loadPortrait(char, portraitSeed) {
     
     let msg = 'Summoning Failed';
     let detail = e.message;
-    if (e.message.includes('Pollen')) {
-        msg = 'Pollen Depleted';
-        detail = 'Hourly quota reached. Connect API key to bypass.';
+    
+    if (e.message === 'Unconnected' || (!key && e.message.includes('400'))) {
+        msg = 'Connection Required ⚡';
+        detail = 'Please connect your Pollinations account<br>to generate these portraits!';
+    } else if (e.message.includes('Pollen')) {
+        msg = 'Pollen Depleted 🌸';
+        detail = 'Hourly public quota reached.<br>Connect your own key to bypass.';
     }
+    
     placeholder.innerHTML = `⚠️<br><strong>${msg}</strong><br><small>${detail}</small>`;
   } finally {
     setBusy(false);
