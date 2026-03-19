@@ -3,7 +3,7 @@ const POLLINATIONS_BASE = 'https://gen.pollinations.ai/image/';
 const PORTRAIT_MODEL = 'zimage';
 
 function buildPortraitPrompt(char) {
-  return `anime fantasy RPG character portrait, ${char.race.name}, ${char.cls.name}, ` +
+  return `anime fantasy RPG ${char.gender} character portrait, ${char.race.name}, ${char.cls.name}, ` +
     `${char.hair} hair, ${char.eyes} eyes, ${char.build}, ${char.style}, ` +
     `${char.mark}, detailed face, cinematic lighting, high quality, ` +
     `white gradient background, upper body shot, digital art`;
