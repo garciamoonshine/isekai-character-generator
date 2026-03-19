@@ -1,45 +1,35 @@
 // ===== AI PORTRAIT GENERATION =====
-const POLLINATIONS_BASE = 'https://gen.pollinations.ai/image/';
-const PORTRAIT_MODEL = 'zimage';
+const POLLINATIONS_BASE = 'https://pollinations.ai/p/';
 
 function buildPortraitPrompt(char) {
-  return `anime fantasy RPG ${char.gender} character portrait, ${char.race.name}, ${char.cls.name}, ` +
-    `${char.hair} hair, ${char.eyes} eyes, ${char.build}, ${char.style}, ` +
-    `${char.mark}, detailed face, cinematic lighting, high quality, ` +
-    `white gradient background, upper body shot, digital art`;
+  // SIMPLIFIED PROMPT: Long complex prompts are often rejected by Pollinations with HTTP 400
+  return `anime character portrait, ${char.race.name}, ${char.cls.name}, ${char.gender}, ${char.hair} hair, ${char.eyes} eyes, digital art style`;
 }
 
-function getPortraitUrl(char, seed) {
+function getPortraitUrl(char, seed, useTurbo = false) {
   const prompt = buildPortraitPrompt(char);
   const encoded = encodeURIComponent(prompt);
-  let url = `${POLLINATIONS_BASE}${encoded}?width=512&height=512&nologo=true&model=${PORTRAIT_MODEL}`;
+  const model = useTurbo ? 'turbo' : 'flux'; // Flux is generally more stable than zimage right now
+  let url = `${POLLINATIONS_BASE}${encoded}?width=512&height=512&nologo=true&model=${model}`;
   if (seed !== undefined) url += `&seed=${seed}`;
   return url;
 }
 
-// Fixed fetcher: removes the broken "?key=sk_..." logic that caused Fallback HTTP 400
 async function fetchPortraitBlob(url, key) {
   const headers = {};
-  if (key) {
-      headers['Authorization'] = `Bearer ${key}`;
-  }
+  if (key) headers['Authorization'] = `Bearer ${key}`;
   
   try {
     const resp = await fetch(url, { headers });
     
-    // Explicitly handle failures
     if (resp.status === 402 || resp.status === 429) throw new Error('Pollen Depleted');
     
     if (!resp.ok) {
-        // If we tried with a key and failed, try one final ANONYMOUS attempt
-        if (key) {
-            console.warn('[Portrait] Authenticated fetch failed, attempting anonymous fallback...');
-            const anonResp = await fetch(url);
-            if (anonResp.ok) {
-                const blob = await anonResp.blob();
-                return URL.createObjectURL(blob);
-            }
-            throw new Error(`Fallback HTTP ${anonResp.status}`);
+        // If the primary model failed (400 often means prompt filtered), try TURBO
+        if (!url.includes('model=turbo')) {
+            console.warn('[Portrait] Primary model failed, trying Turbo fallback...');
+            const turboUrl = url.includes('model=flux') ? url.replace('model=flux', 'model=turbo') : url + '&model=turbo';
+            return fetchPortraitBlob(turboUrl, key);
         }
         throw new Error(`HTTP ${resp.status}`);
     }
@@ -85,7 +75,7 @@ async function loadPortrait(char, portraitSeed) {
             <div style="padding:20px;">
                 <div style="font-size:40px; margin-bottom:10px;">🔌</div>
                 <div style="font-weight:bold; color:var(--accent); font-size:16px;">Connection Required</div>
-                <div style="font-size:12px; margin-top:10px; opacity:0.8; line-height:1.4;">Connect your free Pollinations account to manifest this hero's portrait!</div>
+                <div style="font-size:12px; margin-top:10px; opacity:0.8; line-height:1.4;">Connect your free Pollinations account to bypass public limits!</div>
                 <button onclick="document.getElementById('byop-btn').click()" style="margin-top:20px; background:var(--accent); color:#000; border:none; padding:10px 20px; border-radius:30px; font-weight:bold; cursor:pointer; font-size:13px;">🔗 Connect Now</button>
             </div>
         `;
@@ -101,6 +91,5 @@ async function loadPortrait(char, portraitSeed) {
   } finally {
     setBusy(false);
   }
-
   return pSeed;
 }
