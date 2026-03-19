@@ -17,6 +17,9 @@ function getPortraitUrl(char, seed) {
   return url;
 }
 
+// Global reference to the current error message for display
+let lastErrorDetail = null;
+
 async function fetchPortraitBlob(url, key) {
   const headers = {};
   if (key) headers['Authorization'] = `Bearer ${key}`;
@@ -30,22 +33,37 @@ async function fetchPortraitBlob(url, key) {
     const resp = await fetch(url, fetchOptions);
     clearTimeout(timeoutId);
     
-    if (resp.status === 402 || resp.status === 429) throw new Error('Pollen Depleted');
-    if (resp.status === 400 && !key) throw new Error('Unconnected');
+    if (resp.status === 402 || resp.status === 429) {
+        lastErrorDetail = 'Pollen Depleted';
+        throw new Error('Pollen Depleted');
+    }
     
-    if (resp.status >= 400) {
-        if (url.includes('model=zimage')) {
-            return fetchPortraitBlob(url.replace('model=zimage', 'model=turbo'), key);
+    if (resp.status === 400) {
+        if (!key) {
+            lastErrorDetail = 'Unconnected';
+            throw new Error('Unconnected');
+        } else {
+            const errText = await resp.text();
+            lastErrorDetail = `Bad Request: ${errText.substring(0, 50)}`;
+            throw new Error(lastErrorDetail);
         }
-        throw new Error(`API Error (${resp.status})`);
+    }
+    
+    if (!resp.ok) {
+        lastErrorDetail = `HTTP ${resp.status}`;
+        throw new Error(lastErrorDetail);
     }
     
     const blob = await resp.blob();
     if (blob.size < 100) throw new Error('Empty Image Data');
     return URL.createObjectURL(blob);
   } catch (e) {
-    if (e.name === 'AbortError') throw new Error('Request Timed Out');
-    if (key && !e.message.includes('Depleted')) {
+    if (e.name === 'AbortError') {
+        lastErrorDetail = 'Request Timed Out';
+        throw new Error('Request Timed Out');
+    }
+    if (key && !e.message.includes('Pollen') && !e.message.includes('Bad')) {
+        console.warn('[Portrait] Auth failed, trying public fallback...');
         return fetchPortraitBlob(url, null); 
     }
     throw e;
@@ -64,7 +82,7 @@ async function loadPortrait(char, portraitSeed) {
   img.classList.add('hidden');
   placeholder.classList.add('hidden');
   loading.classList.remove('hidden');
-  loading.textContent = '⏳ Drawing from the Aether...';
+  loading.textContent = '⏳ Manifesting...';
 
   const pSeed = (portraitSeed !== undefined) ? portraitSeed : char.seed;
   const url = getPortraitUrl(char, pSeed);
@@ -77,25 +95,30 @@ async function loadPortrait(char, portraitSeed) {
     seedWrap.classList.remove('hidden');
     if (seedDisplay) seedDisplay.textContent = pSeed;
   } catch (e) {
-    console.error('[Portrait] Error:', e);
+    console.error('[Portrait] Error Caught:', e);
     loading.classList.add('hidden');
     placeholder.classList.remove('hidden');
     
-    if (e.message === 'Unconnected' || (!key && e.message.includes('400'))) {
-        // FRIENDLY VISITOR ONBOARDING
+    // VISITOR SCENARIO
+    if (e.message === 'Unconnected' || (!key && e.message.includes('400')) || (!key && e.message.includes('Bad'))) {
         placeholder.innerHTML = `
             <div style="padding:20px;">
                 <div style="font-size:40px; margin-bottom:10px;">🔌</div>
-                <div style="font-weight:bold; color:var(--accent);">Connection Required</div>
-                <div style="font-size:12px; margin-top:8px; opacity:0.8;">Connect your Pollinations account to manifest this hero's portrait!</div>
-                <button onclick="document.getElementById('byop-btn').click()" style="margin-top:15px; background:var(--accent); color:#000; border:none; padding:8px 16px; border-radius:20px; font-weight:bold; cursor:pointer;">🔗 Connect Now</button>
+                <div style="font-weight:bold; color:var(--accent); font-size:16px;">Connection Required</div>
+                <div style="font-size:12px; margin-top:10px; opacity:0.8; line-height:1.4;">Connect your free Pollinations account to manifested this hero's portrait!</div>
+                <button onclick="document.getElementById('byop-btn').click()" style="margin-top:20px; background:var(--accent); color:#000; border:none; padding:10px 20px; border-radius:30px; font-weight:bold; cursor:pointer; font-size:13px; box-shadow:0 4px 15px rgba(192,132,252,0.3);">🔗 Connect with Pollinations</button>
             </div>
         `;
-    } else {
-        // CRITICAL ERROR (For connected users or major failures)
+    } 
+    // ERROR SCENARIO (Connected or Quota)
+    else {
+        let msg = 'Summoning Failed';
         let detail = e.message;
-        if (e.message.includes('Pollen')) detail = 'Hourly public quota reached.<br>Connect your own key to bypass.';
-        placeholder.innerHTML = `⚠️<br><strong>Summoning Failed</strong><br><small>${detail}</small>`;
+        if (e.message.includes('Pollen')) {
+            msg = 'Pollen Depleted 🌸';
+            detail = 'Hourly public quota reached.<br>Connect your own key to bypass.';
+        }
+        placeholder.innerHTML = `<div style="padding:20px;"><div style="font-size:40px; margin-bottom:10px;">⚠️</div><strong>${msg}</strong><br><small style="display:block; margin-top:8px; opacity:0.7;">${detail}</small></div>`;
     }
   } finally {
     setBusy(false);
