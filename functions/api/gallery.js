@@ -2,12 +2,19 @@
 export async function onRequestGet(context) {
   const { GALLERY_KV } = context.env;
   try {
-    const list = await GALLERY_KV.list({ limit: 50 });
+    // CRITICAL FIX: Only list keys that actually contain character data (prefix 'char_')
+    // This excludes the 'id_' tracking markers which were causing "undefined" cards
+    const list = await GALLERY_KV.list({ prefix: 'char_', limit: 50 });
+    
     const results = await Promise.all(
       list.keys.map(key => GALLERY_KV.get(key.name, { type: 'json' }))
     );
+    
     return new Response(JSON.stringify(results.filter(r => r !== null)), {
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+      headers: { 
+        'Content-Type': 'application/json', 
+        'Access-Control-Allow-Origin': '*' 
+      }
     });
   } catch (e) {
     return new Response(JSON.stringify({ error: e.message }), { status: 500 });
@@ -22,12 +29,10 @@ export async function onRequestPost(context) {
     const charData = JSON.parse(formData.get('metadata'));
     const imageBlob = formData.get('image');
 
-    const uniqueId = charData.id; // composite seed_pseed
+    const uniqueId = charData.id;
     const fileName = `portrait_${uniqueId}.png`;
 
-    // 1. DUPLICATE CHECK
-    // We check if this specific character+portrait combo exists in KV already
-    // To do this efficiently, we check for a key starting with "id_" + uniqueId
+    // Check for duplicate using the tracking prefix
     const exists = await GALLERY_KV.list({ prefix: `id_${uniqueId}` });
     if (exists.keys.length > 0) {
         return new Response(JSON.stringify({ error: 'Already Published' }), { status: 409 });
@@ -37,15 +42,13 @@ export async function onRequestPost(context) {
     const kvKey = `char_${timestamp}_${uniqueId}`;
     const trackingKey = `id_${uniqueId}`;
 
-    // 2. Freeze the image in R2
     if (imageBlob && PORTRAITS_R2) {
         await PORTRAITS_R2.put(fileName, imageBlob);
         charData.portraitUrl = `/api/portrait/${fileName}`;
     }
 
-    // 3. Save to KV (Main list and Tracking key)
     await GALLERY_KV.put(kvKey, JSON.stringify(charData));
-    await GALLERY_KV.put(trackingKey, "1"); // Marker for duplicate check
+    await GALLERY_KV.put(trackingKey, "1");
     
     return new Response(JSON.stringify({ success: true }), {
       headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
