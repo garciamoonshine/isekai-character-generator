@@ -46,14 +46,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `${window.currentCharacter.name.replace(/\\s+/g, '_')}.json`;
+    a.download = `${window.currentCharacter.name.replace(/\s+/g, '_')}.json`;
     a.click();
   });
 });
 
 function loadFromSeeds(charSeed, portraitSeed) {
   currentSeed = charSeed;
-  currentPortraitSeed = portraitSeed !== null ? portraitSeed : charSeed;
+  currentPortraitSeed = (portraitSeed !== null) ? portraitSeed : charSeed;
   const char = generateCharacter(currentSeed);
   renderCharacter(char);
   loadPortrait(char, currentPortraitSeed);
