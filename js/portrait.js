@@ -12,7 +12,9 @@ function buildPortraitPrompt(char) {
 function getPortraitUrl(char, seed) {
   const prompt = buildPortraitPrompt(char);
   const encoded = encodeURIComponent(prompt);
-  let url = `${POLLINATIONS_BASE}${encoded}?width=512&height=512&nologo=true&model=${PORTRAIT_MODEL}`;
+  // CLEANER URL: Removing model=zimage explicit query param as it often conflicts or causes 400 validation errors
+  // on the gen.pollinations.ai endpoint (which assumes zimage by default).
+  let url = `${POLLINATIONS_BASE}${encoded}?width=512&height=512&nologo=true`;
   if (seed !== undefined) url += `&seed=${seed}`;
   return url;
 }
@@ -38,10 +40,11 @@ async function fetchPortraitBlob(url, key) {
         throw new Error('VISITOR_REJECTED');
     }
 
-    // 3. User Errors (400)
+    // 3. User Errors / Validation Errors (400)
     if (resp.status === 400) {
         const body = await resp.json().catch(() => ({}));
-        throw new Error(body.error?.message || 'BAD_REQUEST');
+        const msg = body.error?.message || (body.success === false ? JSON.stringify(body) : 'Query parameter validation failed');
+        throw new Error(msg);
     }
     
     if (!resp.ok) throw new Error(`HTTP_${resp.status}`);
@@ -53,7 +56,7 @@ async function fetchPortraitBlob(url, key) {
     if (e.name === 'AbortError') throw new Error('TIMEOUT');
     
     // Fallback: If we had a key and it failed (but not a quota issue), try anonymous automatically
-    if (key && !['QUOTA_EXHAUSTED', 'BAD_REQUEST'].includes(e.message)) {
+    if (key && !['QUOTA_EXHAUSTED'].includes(e.message) && !e.message.includes('validation')) {
         console.warn('[Portrait] Key failed, trying anonymous fallback...');
         return fetchPortraitBlob(url, null);
     }
@@ -96,7 +99,7 @@ async function loadPortrait(char, portraitSeed) {
 
     // SCENARIO: VISITOR (No Key)
     if (!key) {
-        if (['VISITOR_REJECTED', 'BAD_REQUEST', 'HTTP_400', 'HTTP_401'].some(m => e.message.includes(m))) {
+        if (['VISITOR_REJECTED', 'BAD_REQUEST', 'HTTP_400', 'HTTP_401', 'validation'].some(m => e.message.toLowerCase().includes(m.toLowerCase()))) {
             title = 'Connection Required';
             detail = 'Connect your free Pollinations account to manifest this hero!';
             showConnect = true;
@@ -115,6 +118,9 @@ async function loadPortrait(char, portraitSeed) {
         } else if (e.message === 'QUOTA_EXHAUSTED') {
             title = 'Credits Empty';
             detail = 'Your Pollen account has run out of credits.';
+        } else if (e.message.includes('validation')) {
+            title = 'Prompt Issue';
+            detail = 'The AI didn\'t like the character description.';
         }
     }
 
