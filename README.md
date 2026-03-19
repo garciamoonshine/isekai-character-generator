@@ -24,3 +24,8 @@ Generate your fully realized Isekai RPG character — complete with AI portrait,
 ## BYOP Integration
 
 This app implements the [Bring Your Own Pollen](https://github.com/pollinations/pollinations/blob/main/BRING_YOUR_OWN_POLLEN.md) pattern. Users authorize with their own Pollinations account so image generation uses their own Pollen balance, not the app developer's.
+
+
+---
+
+[![Made with Pollinations AI](https://pollinations.ai/assets/logo-text.svg)](https://pollinations.ai)
