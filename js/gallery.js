@@ -31,10 +31,16 @@ document.addEventListener('DOMContentLoaded', async () => {
           link += `&pseed=${char.portraitSeed}`;
       }
 
-      // Reconstruct the exact URL using the STORED PROMPT
-      // Fallback to basic prompt if older entry has no prompt field
-      const prompt = char.prompt || `anime fantasy RPG character portrait, ${char.race}, ${char.cls}, detailed face, digital art`;
-      const liveUrl = `https://gen.pollinations.ai/image/${encodeURIComponent(prompt)}?width=300&height=533&nologo=true&model=zimage&seed=${char.portraitSeed || char.seed}`;
+      // DETERMINING IMAGE SOURCE
+      let liveUrl;
+      if (char.portraitUrl && char.portraitUrl.startsWith('/api/')) {
+          // IF IT IS FROZEN IN R2: Use our proxy
+          liveUrl = char.portraitUrl;
+      } else {
+          // IF IT IS A RECIPE: Reconstruct using stable /p/ endpoint + flux
+          const prompt = char.prompt || `anime fantasy RPG character portrait, ${char.race}, ${char.cls}, detailed face, digital art`;
+          liveUrl = `https://pollinations.ai/p/${encodeURIComponent(prompt)}?width=300&height=533&nologo=true&model=flux&seed=${char.portraitSeed || char.seed}`;
+      }
 
       card.innerHTML = `
         <div class="gc-portrait-wrap" style="aspect-ratio:9/16; background:var(--bg3); border-radius:10px; overflow:hidden; margin-bottom:12px;">
@@ -50,7 +56,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       grid.appendChild(card);
     });
   } catch (e) {
-    loader.innerHTML = '⚠️ The Multiverse connection is unstable.<br><small>Please verify Cloudflare KV bindings.</small>';
+    loader.innerHTML = '⚠️ The Multiverse connection is unstable.<br><small>Please verify Cloudflare KV/R2 bindings.</small>';
     console.error('[Gallery] API Error:', e);
   }
 });
