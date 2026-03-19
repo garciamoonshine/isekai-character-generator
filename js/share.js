@@ -1,17 +1,27 @@
-// ===== SHARE VIA URL (Option A — base64 encoded) =====
-function buildShareUrl(seed) {
-  const base = window.location.origin + window.location.pathname.replace(/\/[^/]*$/, '/');
-  return `${base}index.html#seed=${seed}`;
+// ===== SHARE VIA URL (Dual Seed Support) =====
+function buildShareUrl(charSeed, portraitSeed) {
+  const base = window.location.origin + window.location.pathname.replace(/\\/[^/]*$/, '/');
+  // If seeds are same, keep short URL. Otherwise add pseed.
+  let hash = `seed=${charSeed}`;
+  if (portraitSeed !== charSeed && portraitSeed !== null) {
+    hash += `&pseed=${portraitSeed}`;
+  }
+  return `${base}index.html#${hash}`;
 }
 
 function getShareSeed() {
   const hash = window.location.hash;
-  const match = hash.match(/#seed=(\d+)/);
-  return match ? parseInt(match[1]) : null;
+  const charMatch = hash.match(/seed=(\\d+)/);
+  const portMatch = hash.match(/pseed=(\\d+)/);
+  
+  return {
+    charSeed: charMatch ? parseInt(charMatch[1]) : null,
+    portraitSeed: portMatch ? parseInt(portMatch[1]) : null
+  };
 }
 
-function copyShareUrl(seed) {
-  const url = buildShareUrl(seed);
+function copyShareUrl(charSeed, portraitSeed) {
+  const url = buildShareUrl(charSeed, portraitSeed);
   navigator.clipboard.writeText(url).then(() => {
     showToast('✅ Link copied to clipboard!');
   }).catch(() => {
