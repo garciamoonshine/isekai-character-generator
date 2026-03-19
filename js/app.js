@@ -1,25 +1,25 @@
-// ===== MAIN APP CONTROLLER (UX & R2 & DUP-BLOCK) =====
+// ===== MAIN APP CONTROLLER (UX & R2 & COOLDOWN) =====
 let currentSeed = null;
 let currentPortraitSeed = null;
 let isGenerating = false;
 let globalGalleryCache = null;
+let cooldownTimer = null;
 
 document.addEventListener('DOMContentLoaded', async () => {
   const seeds = getShareSeed();
   if (seeds.charSeed !== null) loadFromSeeds(seeds.charSeed, seeds.portraitSeed);
 
-  // Pre-fetch gallery index to handle client-side button states
   refreshGalleryCache();
 
   document.getElementById('generate-btn').addEventListener('click', () => {
-    if (isGenerating) return;
+    if (isGenerating || cooldownTimer) return;
     currentSeed = generateSeed();
     currentPortraitSeed = currentSeed;
     loadFromSeeds(currentSeed, currentPortraitSeed);
   });
 
   document.getElementById('reroll-portrait-btn').addEventListener('click', () => {
-    if (isGenerating || !window.currentCharacter) return;
+    if (isGenerating || cooldownTimer || !window.currentCharacter) return;
     currentPortraitSeed = generateSeed();
     loadPortrait(window.currentCharacter, currentPortraitSeed);
     updateURLAndShareBox();
@@ -40,29 +40,24 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const btn = document.getElementById('publish-btn');
     btn.disabled = true;
-    btn.textContent = '⏳ Publishing...';
+    btn.textContent = '⏳ Freezing...';
     
     try {
         const imageRes = await fetch(imgElement.src);
         const imageBlob = await imageRes.blob();
-        
         const res = await publishToGlobalGallery(window.currentCharacter, currentPortraitSeed, imageBlob);
         
         if (res.ok) {
-            showToast('🌐 Published to the Multiverse!');
+            showToast('🌐 Published!');
             btn.textContent = '✅ Published';
-            // Update local cache
             if (globalGalleryCache) globalGalleryCache.push(`${window.currentCharacter.seed}_${currentPortraitSeed}`);
-        } else if (res.status === 409) {
-            showToast('✨ This hero is already in the Gallery!');
-            btn.textContent = '✅ Already Published';
         } else {
             showToast('⚠️ Publish failed.');
             btn.disabled = false;
             btn.textContent = '🌐 Publish to Gallery';
         }
     } catch (e) {
-        showToast('⚠️ Processing error.');
+        showToast('⚠️ Error.');
         btn.disabled = false;
     }
   });
@@ -71,10 +66,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!window.currentCharacter) return;
     const exportData = { character: window.currentCharacter, portraitSeed: currentPortraitSeed };
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `${window.currentCharacter.name.replace(/\\s+/g, '_')}.json`;
-    a.click();
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = `${window.currentCharacter.name.replace(/\\s+/g, '_')}.json`; a.click();
   });
 });
 
@@ -84,7 +77,7 @@ async function refreshGalleryCache() {
         const data = await res.json();
         globalGalleryCache = data.map(c => c.id || `${c.seed}_${c.portraitSeed}`);
         checkCurrentPublishStatus();
-    } catch(e) { console.warn('Cache refresh failed'); }
+    } catch(e) {}
 }
 
 function checkCurrentPublishStatus() {
@@ -94,10 +87,29 @@ function checkCurrentPublishStatus() {
     if (globalGalleryCache.includes(currentId)) {
         btn.disabled = true;
         btn.textContent = '✅ Published';
-    } else {
+    } else if (!isGenerating && !cooldownTimer) {
         btn.disabled = false;
         btn.textContent = '🌐 Publish to Gallery';
     }
+}
+
+function startCooldown() {
+    let seconds = 10;
+    const genBtn = document.getElementById('generate-btn');
+    const rerollBtn = document.getElementById('reroll-portrait-btn');
+    
+    cooldownTimer = setInterval(() => {
+        seconds--;
+        if (seconds <= 0) {
+            clearInterval(cooldownTimer);
+            cooldownTimer = null;
+            genBtn.textContent = '🎲 Roll New Character';
+            setBusy(false);
+        } else {
+            genBtn.textContent = `⏳ Cool-down (${seconds}s)`;
+            rerollBtn.disabled = true;
+        }
+    }, 1000);
 }
 
 function setBusy(busy) {
@@ -105,9 +117,9 @@ function setBusy(busy) {
     const btns = ['generate-btn', 'reroll-portrait-btn', 'publish-btn'];
     btns.forEach(id => {
         const el = document.getElementById(id);
-        if (el) el.disabled = busy;
+        if (el) el.disabled = (busy || !!cooldownTimer);
     });
-    if (!busy) checkCurrentPublishStatus();
+    if (!busy && !cooldownTimer) checkCurrentPublishStatus();
 }
 
 async function loadFromSeeds(charSeed, portraitSeed) {
@@ -117,11 +129,10 @@ async function loadFromSeeds(charSeed, portraitSeed) {
   renderCharacter(char);
   
   const hash = window.location.hash;
-  const r2Match = hash.match(/r2=([^&]+)/);
-  
-  if (r2Match) {
+  if (hash.includes('r2=')) {
+      const parts = hash.split('r2=')[1].split('&')[0];
       const img = document.getElementById('portrait-img');
-      img.src = `/api/portrait/${r2Match[1]}`;
+      img.src = `/api/portrait/${parts}`;
       img.classList.remove('hidden');
       document.getElementById('portrait-placeholder').classList.add('hidden');
       document.getElementById('portrait-loading').classList.add('hidden');
@@ -129,7 +140,8 @@ async function loadFromSeeds(charSeed, portraitSeed) {
       document.getElementById('seed-display').textContent = currentPortraitSeed;
       setBusy(false);
   } else {
-      await loadPortrait(char, currentPortraitSeed);
+      const result = await loadPortrait(char, currentPortraitSeed);
+      if (result) startCooldown(); // Start 10s cooldown after successful generation
   }
   updateURLAndShareBox();
 }
@@ -159,25 +171,20 @@ async function loadPortrait(char, portraitSeed) {
     img.classList.remove('hidden'); loading.classList.add('hidden');
     seedWrap.classList.remove('hidden');
     if (seedDisplay) seedDisplay.textContent = pSeed;
+    return true; 
   } catch (e) {
     loading.classList.add('hidden'); placeholder.classList.remove('hidden');
     placeholder.innerHTML = `⚠️<br><strong>Failed</strong><br><small>${e.message}</small>`;
-  } finally { 
-      setBusy(false); 
+    setBusy(false);
+    return false;
   }
-  return pSeed;
 }
 
 async function publishToGlobalGallery(char, portraitSeed, imageBlob) {
   const metadata = {
-    id: `${char.seed}_${portraitSeed}`,
-    seed: char.seed,
-    portraitSeed: portraitSeed,
-    name: char.name,
-    title: char.title,
-    race: char.race.name,
-    cls: `${char.cls.icon} ${char.cls.name}`,
-    traits: char.traits,
+    id: `${char.seed}_${portraitSeed}`, seed: char.seed, portraitSeed: portraitSeed,
+    name: char.name, title: char.title, race: char.race.name,
+    cls: `${char.cls.icon} ${char.cls.name}`, traits: char.traits,
     prompt: buildPortraitPrompt(char)
   };
   const formData = new FormData();
