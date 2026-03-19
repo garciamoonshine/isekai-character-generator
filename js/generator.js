@@ -85,10 +85,9 @@ function renderCharacter(char) {
 
   // Enable buttons
   ['reroll-portrait-btn','share-btn','publish-btn','export-btn'].forEach(id => {
-    document.getElementById(id).disabled = false;
+    const btn = document.getElementById(id);
+    if (btn) btn.disabled = false;
   });
 
-  // Update share URL display
-  const shareUrl = buildShareUrl(char.seed);
-  document.getElementById('share-url-box').textContent = shareUrl;
+  // Share URL is updated in app.js via updateURLAndShareBox
 }
