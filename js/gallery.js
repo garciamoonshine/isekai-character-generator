@@ -11,10 +11,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   grid.appendChild(loader);
 
   try {
-    // Fetch from Cloudflare KV API
     const res = await fetch('/api/gallery');
     const gallery = await res.json();
-    
     loader.remove();
 
     if (!gallery || gallery.length === 0) {
@@ -26,14 +24,18 @@ document.addEventListener('DOMContentLoaded', async () => {
       const card = document.createElement('div');
       card.className = 'gallery-card';
       
-      // Determine link: if pseed exists and is different from seed
       let link = `index.html#seed=${char.seed}`;
       if (char.portraitSeed && char.portraitSeed !== char.seed) {
           link += `&pseed=${char.portraitSeed}`;
       }
 
+      // CRITICAL FIX: The stored portraitUrl is a local Blob URL which EXPIRES.
+      // We must reconstruct the live Pollinations URL for the gallery view.
+      const prompt = `anime fantasy RPG character portrait, ${char.race}, ${char.cls}, detailed face, digital art`;
+      const liveUrl = `https://gen.pollinations.ai/image/${encodeURIComponent(prompt)}?width=300&height=533&nologo=true&model=zimage&seed=${char.portraitSeed || char.seed}`;
+
       card.innerHTML = `
-        <img src="${char.portraitUrl || ''}" alt="${char.name}" onerror="this.src='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='">
+        <img src="${liveUrl}" alt="${char.name}" loading="lazy">
         <div class="gc-name">${char.name}</div>
         <div class="gc-class">${char.cls}</div>
         <div class="gc-traits">${char.traits ? char.traits.slice(0,2).join(' · ') : ''}</div>
@@ -44,7 +46,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       grid.appendChild(card);
     });
   } catch (e) {
-    loader.innerHTML = '⚠️ Failed to connect to the Multiverse API. Check your Cloudflare KV bindings.';
+    loader.innerHTML = '⚠️ Failed to connect to the Multiverse API.';
     console.error('[Gallery] API Error:', e);
   }
 });
