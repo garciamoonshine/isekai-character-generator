@@ -87,7 +87,7 @@ function checkCurrentPublishStatus() {
     if (globalGalleryCache.includes(currentId)) {
         btn.disabled = true;
         btn.textContent = '✅ Published';
-    } else if (!isGenerating && !cooldownTimer) {
+    } else if (!isGenerating) { // NO LONGER CHECKS COOLDOWN
         btn.disabled = false;
         btn.textContent = '🌐 Publish to Gallery';
     }
@@ -104,9 +104,14 @@ function startCooldown() {
             clearInterval(cooldownTimer);
             cooldownTimer = null;
             genBtn.textContent = '🎲 Roll New Character';
-            setBusy(false);
+            // Only re-enable if not currently generating
+            if (!isGenerating) {
+                genBtn.disabled = false;
+                rerollBtn.disabled = false;
+            }
         } else {
             genBtn.textContent = `⏳ Cool-down (${seconds}s)`;
+            genBtn.disabled = true;
             rerollBtn.disabled = true;
         }
     }, 1000);
@@ -114,12 +119,14 @@ function startCooldown() {
 
 function setBusy(busy) {
     isGenerating = busy;
-    const btns = ['generate-btn', 'reroll-portrait-btn', 'publish-btn'];
-    btns.forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.disabled = (busy || !!cooldownTimer);
-    });
-    if (!busy && !cooldownTimer) checkCurrentPublishStatus();
+    // Generate and Reroll buttons are locked if busy OR cooldown is active
+    document.getElementById('generate-btn').disabled = (busy || !!cooldownTimer);
+    document.getElementById('reroll-portrait-btn').disabled = (busy || !!cooldownTimer);
+    
+    // Publish button is ONLY locked if busy (generating), NOT during cooldown
+    document.getElementById('publish-btn').disabled = busy;
+
+    if (!busy) checkCurrentPublishStatus();
 }
 
 async function loadFromSeeds(charSeed, portraitSeed) {
@@ -141,7 +148,7 @@ async function loadFromSeeds(charSeed, portraitSeed) {
       setBusy(false);
   } else {
       const result = await loadPortrait(char, currentPortraitSeed);
-      if (result) startCooldown(); // Start 10s cooldown after successful generation
+      if (result) startCooldown(); 
   }
   updateURLAndShareBox();
 }
@@ -171,6 +178,7 @@ async function loadPortrait(char, portraitSeed) {
     img.classList.remove('hidden'); loading.classList.add('hidden');
     seedWrap.classList.remove('hidden');
     if (seedDisplay) seedDisplay.textContent = pSeed;
+    setBusy(false);
     return true; 
   } catch (e) {
     loading.classList.add('hidden'); placeholder.classList.remove('hidden');
