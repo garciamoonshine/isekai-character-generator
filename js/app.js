@@ -3,60 +3,37 @@ let currentSeed = null;
 let currentPortraitSeed = null;
 
 document.addEventListener('DOMContentLoaded', () => {
-  console.log('[App] Loaded');
-  
-  // Check for shared seeds in URL
-  const seeds = getShareSeed();
-  if (seeds.charSeed !== null) {
-    console.log('[App] Loading from shared seeds:', seeds);
-    loadFromSeeds(seeds.charSeed, seeds.portraitSeed);
-  }
+    // 1. Initial State: Check for shared seed in URL
+    const seeds = getShareSeed();
+    if (seeds.charSeed !== null) {
+        loadFromSeeds(seeds.charSeed, seeds.portraitSeed);
+    }
 
-  // Generate button
-  const genBtn = document.getElementById('generate-btn');
-  if (genBtn) {
-      genBtn.addEventListener('click', () => {
-        console.log('[App] Rolling new character...');
+    // 2. Button Listeners
+    document.getElementById('generate-btn').addEventListener('click', () => {
         currentSeed = generateSeed();
-        currentPortraitSeed = currentSeed; // Default same seed
+        currentPortraitSeed = currentSeed;
         loadFromSeeds(currentSeed, currentPortraitSeed);
-      });
-  }
+    });
 
-  // Reroll portrait
-  const rerollBtn = document.getElementById('reroll-portrait-btn');
-  if (rerollBtn) {
-      rerollBtn.addEventListener('click', () => {
+    document.getElementById('reroll-portrait-btn').addEventListener('click', () => {
         if (!window.currentCharacter) return;
-        console.log('[App] Rerolling portrait...');
         currentPortraitSeed = generateSeed();
         loadPortrait(window.currentCharacter, currentPortraitSeed);
         updateURLAndShareBox();
-      });
-  }
+    });
 
-  // Share button
-  const shareBtn = document.getElementById('share-btn');
-  if (shareBtn) {
-      shareBtn.addEventListener('click', () => {
+    document.getElementById('share-btn').addEventListener('click', () => {
         if (currentSeed !== null) copyShareUrl(currentSeed, currentPortraitSeed);
-      });
-  }
+    });
 
-  // Publish to gallery
-  const pubBtn = document.getElementById('publish-btn');
-  if (pubBtn) {
-      pubBtn.addEventListener('click', () => {
+    document.getElementById('publish-btn').addEventListener('click', () => {
         if (!window.currentCharacter) return;
         publishToGallery(window.currentCharacter, currentPortraitSeed);
         showToast('🌐 Published to gallery!');
-      });
-  }
+    });
 
-  // Export JSON
-  const expBtn = document.getElementById('export-btn');
-  if (expBtn) {
-      expBtn.addEventListener('click', () => {
+    document.getElementById('export-btn').addEventListener('click', () => {
         if (!window.currentCharacter) return;
         const exportData = {
             character: window.currentCharacter,
@@ -67,17 +44,22 @@ document.addEventListener('DOMContentLoaded', () => {
         a.href = URL.createObjectURL(blob);
         a.download = `${window.currentCharacter.name.replace(/\s+/g, '_')}.json`;
         a.click();
-      });
-  }
+    });
 });
 
 function loadFromSeeds(charSeed, portraitSeed) {
-  currentSeed = charSeed;
-  currentPortraitSeed = (portraitSeed !== null) ? portraitSeed : charSeed;
-  const char = generateCharacter(currentSeed);
-  renderCharacter(char);
-  loadPortrait(char, currentPortraitSeed);
-  updateURLAndShareBox();
+    currentSeed = charSeed;
+    currentPortraitSeed = (portraitSeed !== null) ? portraitSeed : charSeed;
+    
+    // Generate the character logic
+    const char = generateCharacter(currentSeed);
+    renderCharacter(char);
+    
+    // Load visuals
+    loadPortrait(char, currentPortraitSeed);
+    
+    // Update interface
+    updateURLAndShareBox();
 }
 
 function updateURLAndShareBox() {
@@ -88,22 +70,22 @@ function updateURLAndShareBox() {
 }
 
 function publishToGallery(char, portraitSeed) {
-  const gallery = JSON.parse(localStorage.getItem('isekai_gallery') || '[]');
-  const uniqueId = `${char.seed}_${portraitSeed}`;
-  const exists = gallery.find(c => c.id === uniqueId);
-  
-  if (!exists) {
-    gallery.unshift({
-      id: uniqueId,
-      seed: char.seed,
-      portraitSeed: portraitSeed,
-      name: char.name,
-      title: char.title,
-      race: char.race.name,
-      cls: `${char.cls.icon} ${char.cls.name}`,
-      traits: char.traits,
-      portraitUrl: document.getElementById('portrait-img').src || ''
-    });
-    localStorage.setItem('isekai_gallery', JSON.stringify(gallery.slice(0, 50)));
-  }
+    const gallery = JSON.parse(localStorage.getItem('isekai_gallery') || '[]');
+    const uniqueId = `${char.seed}_${portraitSeed}`;
+    const exists = gallery.find(c => c.id === uniqueId);
+    
+    if (!exists) {
+        gallery.unshift({
+            id: uniqueId,
+            seed: char.seed,
+            portraitSeed: portraitSeed,
+            name: char.name,
+            title: char.title,
+            race: char.race.name,
+            cls: `${char.cls.icon} ${char.cls.name}`,
+            traits: char.traits,
+            portraitUrl: document.getElementById('portrait-img').src || ''
+        });
+        localStorage.setItem('isekai_gallery', JSON.stringify(gallery.slice(0, 50)));
+    }
 }
