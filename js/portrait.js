@@ -1,6 +1,5 @@
 // ===== AI PORTRAIT GENERATION =====
 const POLLINATIONS_BASE = 'https://gen.pollinations.ai/image/';
-const PORTRAIT_MODEL = 'zimage'; 
 
 function buildPortraitPrompt(char) {
   return `anime fantasy RPG character portrait, ${char.race.name}, ${char.cls.name}, ` +
@@ -12,39 +11,29 @@ function buildPortraitPrompt(char) {
 function getPortraitUrl(char, seed) {
   const prompt = buildPortraitPrompt(char);
   const encoded = encodeURIComponent(prompt);
-  // CLEANER URL: Removing model=zimage explicit query param as it often conflicts or causes 400 validation errors
-  // on the gen.pollinations.ai endpoint (which assumes zimage by default).
   let url = `${POLLINATIONS_BASE}${encoded}?width=512&height=512&nologo=true`;
   if (seed !== undefined) url += `&seed=${seed}`;
   return url;
 }
 
+// Logic-only fetcher. Returns Blob or Throws specific string error.
 async function fetchPortraitBlob(url, key) {
   const headers = {};
   if (key) headers['Authorization'] = `Bearer ${key}`;
   
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 60000); 
+  
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 60000); 
     const resp = await fetch(url, { headers, signal: controller.signal });
     clearTimeout(timeoutId);
     
-    // 1. Quota Errors
-    if (resp.status === 402 || resp.status === 429) {
-        throw new Error('QUOTA_EXHAUSTED');
-    }
+    if (resp.status === 402 || resp.status === 429) throw new Error('QUOTA_EXHAUSTED');
+    if (resp.status === 401 || resp.status === 403) throw new Error('AUTH_REJECTED');
     
-    // 2. Auth Errors (401/403)
-    if (resp.status === 401 || resp.status === 403) {
-        if (key) throw new Error('INVALID_KEY');
-        throw new Error('VISITOR_REJECTED');
-    }
-
-    // 3. User Errors / Validation Errors (400)
     if (resp.status === 400) {
         const body = await resp.json().catch(() => ({}));
-        const msg = body.error?.message || (body.success === false ? JSON.stringify(body) : 'Query parameter validation failed');
-        throw new Error(msg);
+        throw new Error(body.error?.message || 'VALIDATION_FAILED');
     }
     
     if (!resp.ok) throw new Error(`HTTP_${resp.status}`);
@@ -54,12 +43,6 @@ async function fetchPortraitBlob(url, key) {
     return URL.createObjectURL(blob);
   } catch (e) {
     if (e.name === 'AbortError') throw new Error('TIMEOUT');
-    
-    // Fallback: If we had a key and it failed (but not a quota issue), try anonymous automatically
-    if (key && !['QUOTA_EXHAUSTED'].includes(e.message) && !e.message.includes('validation')) {
-        console.warn('[Portrait] Key failed, trying anonymous fallback...');
-        return fetchPortraitBlob(url, null);
-    }
     throw e;
   }
 }
@@ -82,6 +65,7 @@ async function loadPortrait(char, portraitSeed) {
   const url = getPortraitUrl(char, pSeed);
 
   try {
+    // 1. Try Primary (Authenticated if key exists, otherwise Anonymous)
     const blobUrl = await fetchPortraitBlob(url, key);
     img.src = blobUrl;
     img.classList.remove('hidden');
@@ -90,6 +74,24 @@ async function loadPortrait(char, portraitSeed) {
     if (seedDisplay) seedDisplay.textContent = pSeed;
   } catch (e) {
     console.error('[Portrait] Error:', e.message);
+    
+    // 2. RETRY LOGIC: If a key was used and it failed (but NOT a quota issue), try one final anonymous attempt
+    if (key && e.message !== 'QUOTA_EXHAUSTED') {
+        try {
+            console.log('[Portrait] Authenticated fetch failed, attempting one-time anonymous fallback...');
+            const fallbackBlob = await fetchPortraitBlob(url, null);
+            img.src = fallbackBlob;
+            img.classList.remove('hidden');
+            loading.classList.add('hidden');
+            seedWrap.classList.remove('hidden');
+            if (seedDisplay) seedDisplay.textContent = pSeed;
+            setBusy(false);
+            return pSeed;
+        } catch (fallbackError) {
+            e = fallbackError; // If fallback also fails, use the latest error for the UI
+        }
+    }
+
     loading.classList.add('hidden');
     placeholder.classList.remove('hidden');
     
@@ -97,30 +99,23 @@ async function loadPortrait(char, portraitSeed) {
     let detail = e.message;
     let showConnect = false;
 
-    // SCENARIO: VISITOR (No Key)
+    // DECISION: Should we show the "Connect" button or just a "Failure" message?
     if (!key) {
-        if (['VISITOR_REJECTED', 'BAD_REQUEST', 'HTTP_400', 'HTTP_401', 'validation'].some(m => e.message.toLowerCase().includes(m.toLowerCase()))) {
-            title = 'Connection Required';
-            detail = 'Connect your free Pollinations account to manifest this hero!';
-            showConnect = true;
-        } else if (e.message === 'QUOTA_EXHAUSTED') {
-            title = 'Pollen Depleted 🌸';
-            detail = 'The public hourly quota is full. Connect your own key to bypass!';
-            showConnect = true;
-        }
-    } 
-    // SCENARIO: CONNECTED (Has Key)
-    else {
-        if (e.message === 'INVALID_KEY') {
-            title = 'Key Invalid';
-            detail = 'Your API key was rejected. Please reconnect.';
+        // Visitors always get the onboarding UI for standard auth errors or quotas
+        title = (e.message === 'QUOTA_EXHAUSTED') ? 'Pollen Depleted 🌸' : 'Connection Required';
+        detail = (e.message === 'QUOTA_EXHAUSTED') ? 'The public hourly quota is full.' : 'Connect your Pollinations account to manifest portraits!';
+        showConnect = true;
+    } else {
+        // Connected users get specific technical error feedback
+        if (e.message === 'AUTH_REJECTED') {
+            title = 'Key Rejected';
+            detail = 'Your API key is invalid or unauthorized.';
             showConnect = true;
         } else if (e.message === 'QUOTA_EXHAUSTED') {
             title = 'Credits Empty';
-            detail = 'Your Pollen account has run out of credits.';
-        } else if (e.message.includes('validation')) {
-            title = 'Prompt Issue';
-            detail = 'The AI didn\'t like the character description.';
+            detail = 'Your personal Pollen balance has run out.';
+        } else {
+            detail = e.message; // Show raw error like 'VALIDATION_FAILED' or 'TIMEOUT'
         }
     }
 
@@ -130,7 +125,7 @@ async function loadPortrait(char, portraitSeed) {
                 <div style="font-size:40px; margin-bottom:10px;">🔌</div>
                 <div style="font-weight:bold; color:var(--accent); font-size:16px;">${title}</div>
                 <div style="font-size:12px; margin-top:10px; opacity:0.8; line-height:1.4;">${detail}</div>
-                <button onclick="document.getElementById('byop-btn').click()" style="margin-top:20px; background:var(--accent); color:#000; border:none; padding:10px 20px; border-radius:30px; font-weight:bold; cursor:pointer; font-size:13px; box-shadow:0 4px 15px rgba(192,132,252,0.3);">🔗 Connect with Pollinations</button>
+                <button onclick="document.getElementById('byop-btn').click()" style="margin-top:20px; background:var(--accent); color:#000; border:none; padding:10px 20px; border-radius:30px; font-weight:bold; cursor:pointer; font-size:13px;">🔗 Connect Now</button>
             </div>
         `;
     } else {
