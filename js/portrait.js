@@ -1,5 +1,4 @@
 // ===== AI PORTRAIT GENERATION =====
-// Standard model for public visuals
 const POLLINATIONS_BASE = 'https://gen.pollinations.ai/image/';
 const PORTRAIT_MODEL = 'zimage';
 
@@ -10,46 +9,31 @@ function buildPortraitPrompt(char) {
     `white gradient background, upper body shot, digital art`;
 }
 
-// URL generation logic
-function getPortraitUrl(char, seed, key = null) {
+function getPortraitUrl(char, seed) {
   const prompt = buildPortraitPrompt(char);
   const encoded = encodeURIComponent(prompt);
-  // We use gen.pollinations.ai because it handles generic public requests better
   let url = `${POLLINATIONS_BASE}${encoded}?width=512&height=512&nologo=true&model=${PORTRAIT_MODEL}`;
   if (seed !== undefined) url += `&seed=${seed}`;
-  // If no auth key is provided, we still point to the public endpoint
   return url;
 }
 
-// Updated fetch logic to handle the "No Key" scenario gracefully
 async function fetchPortraitBlob(url, key) {
   const headers = {};
+  if (key) headers['Authorization'] = `Bearer ${key}`;
   
-  // Try the authenticated path if a key exists
-  if (key) {
-      headers['Authorization'] = `Bearer ${key}`;
-      try {
-        const resp = await fetch(url, { headers });
-        if (resp.ok) {
-            const blob = await resp.blob();
-            return URL.createObjectURL(blob);
-        }
-      } catch (e) { console.warn('[Portrait] Auth fetch failed, trying public fallback...'); }
-  }
-
-  // Fallback to Public No-Key fetch
   try {
-    const publicUrl = url; // Pollinations supports anonymous requests
-    const res = await fetch(publicUrl);
+    const resp = await fetch(url, { headers });
+    if (resp.status === 400) throw new Error('Bad Request (Prompt Issue)');
+    if (resp.status === 402 || resp.status === 429) throw new Error('Pollen Depleted');
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     
-    if (res.status === 402 || res.status === 429) {
-        throw new Error('Pollen Depleted'); // Specific error for credit/rate limits
-    }
-    
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const blob = await res.blob();
+    const blob = await resp.blob();
     return URL.createObjectURL(blob);
   } catch (e) {
+    if (key) {
+        console.warn('[Portrait] Auth failed, trying public fallback...');
+        return fetchPortraitBlob(url, null);
+    }
     throw e;
   }
 }
@@ -65,10 +49,10 @@ async function loadPortrait(char, portraitSeed) {
   img.classList.add('hidden');
   placeholder.classList.add('hidden');
   loading.classList.remove('hidden');
-  loading.textContent = '⏳ Manifesting Portrait...';
+  loading.textContent = '⏳ Manifesting...';
 
   const pSeed = (portraitSeed !== undefined) ? portraitSeed : char.seed;
-  const url = getPortraitUrl(char, pSeed, key);
+  const url = getPortraitUrl(char, pSeed);
 
   try {
     const blobUrl = await fetchPortraitBlob(url, key);
@@ -78,25 +62,18 @@ async function loadPortrait(char, portraitSeed) {
     seedWrap.classList.remove('hidden');
     if (seedDisplay) seedDisplay.textContent = pSeed;
   } catch (e) {
-    console.error('[Portrait] Summoning Failed:', e);
+    console.error('[Portrait] Failed:', e);
     loading.classList.add('hidden');
     placeholder.classList.remove('hidden');
     
     let msg = 'Summoning Failed';
-    let detail = 'The Multiverse is unstable.';
-    
+    let detail = e.message;
     if (e.message.includes('Pollen')) {
         msg = 'Pollen Depleted';
-        detail = 'Hourly public quota reached.<br>Connect your own Pollen to bypass.';
-    } else if (!key) {
-        msg = 'Connection Required';
-        detail = 'Please connect Pollinations API<br>to generate unique visuals.';
-    } else {
-        detail = e.message;
+        detail = 'Hourly quota reached. Connect API key to bypass.';
     }
     
     placeholder.innerHTML = `⚠️<br><strong>${msg}</strong><br><small>${detail}</small>`;
   }
-
   return pSeed;
 }
