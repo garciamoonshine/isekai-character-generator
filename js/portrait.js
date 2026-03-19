@@ -12,7 +12,7 @@ function buildPortraitPrompt(char) {
 function getPortraitUrl(char, seed) {
   const prompt = buildPortraitPrompt(char);
   const encoded = encodeURIComponent(prompt);
-  let url = `${POLLINATIONS_BASE}${encoded}?width=512&height=512&nologo=true&safe=false&model=${PORTRAIT_MODEL}`;
+  let url = `${POLLINATIONS_BASE}${encoded}?width=1080&height=1920&nologo=true&safe=false&model=${PORTRAIT_MODEL}`;
   if (seed !== undefined) url += `&seed=${seed}`;
   return url;
 }
