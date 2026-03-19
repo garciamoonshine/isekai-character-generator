@@ -31,8 +31,6 @@ async function fetchPortraitBlob(url, key) {
     clearTimeout(timeoutId);
     
     if (resp.status === 402 || resp.status === 429) throw new Error('Pollen Depleted');
-    
-    // If we get a 400 and we DON'T HAVE A KEY, it means anonymous public usage is blocked/exhausted
     if (resp.status === 400 && !key) throw new Error('Unconnected');
     
     if (resp.status >= 400) {
@@ -79,22 +77,26 @@ async function loadPortrait(char, portraitSeed) {
     seedWrap.classList.remove('hidden');
     if (seedDisplay) seedDisplay.textContent = pSeed;
   } catch (e) {
-    console.error('[Portrait] Failed:', e);
+    console.error('[Portrait] Error:', e);
     loading.classList.add('hidden');
     placeholder.classList.remove('hidden');
     
-    let msg = 'Summoning Failed';
-    let detail = e.message;
-    
     if (e.message === 'Unconnected' || (!key && e.message.includes('400'))) {
-        msg = 'Connection Required ⚡';
-        detail = 'Please connect your Pollinations account<br>to generate these portraits!';
-    } else if (e.message.includes('Pollen')) {
-        msg = 'Pollen Depleted 🌸';
-        detail = 'Hourly public quota reached.<br>Connect your own key to bypass.';
+        // FRIENDLY VISITOR ONBOARDING
+        placeholder.innerHTML = `
+            <div style="padding:20px;">
+                <div style="font-size:40px; margin-bottom:10px;">🔌</div>
+                <div style="font-weight:bold; color:var(--accent);">Connection Required</div>
+                <div style="font-size:12px; margin-top:8px; opacity:0.8;">Connect your Pollinations account to manifest this hero's portrait!</div>
+                <button onclick="document.getElementById('byop-btn').click()" style="margin-top:15px; background:var(--accent); color:#000; border:none; padding:8px 16px; border-radius:20px; font-weight:bold; cursor:pointer;">🔗 Connect Now</button>
+            </div>
+        `;
+    } else {
+        // CRITICAL ERROR (For connected users or major failures)
+        let detail = e.message;
+        if (e.message.includes('Pollen')) detail = 'Hourly public quota reached.<br>Connect your own key to bypass.';
+        placeholder.innerHTML = `⚠️<br><strong>Summoning Failed</strong><br><small>${detail}</small>`;
     }
-    
-    placeholder.innerHTML = `⚠️<br><strong>${msg}</strong><br><small>${detail}</small>`;
   } finally {
     setBusy(false);
   }
